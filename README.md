@@ -1,5 +1,4 @@
-# (Insert name here)
-###### we still haven't thought of a name yet
+# Physicc
 This is a game all about physics, specifically building circuits!
 This was created for a physics final project cause we decided that it would be a good idea to write an entire game in the span of about 6 weeks while *also* 
 learning many new technologies including:
