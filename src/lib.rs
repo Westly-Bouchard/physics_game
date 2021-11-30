@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use wasm_bindgen::prelude::*;
-//Retrograde appears to have broken itself so I guess we won't be using it
+// Retrograde appears to have broken itself so I guess we won't be using it
 // use bevy_retrograde::prelude::*;
 
-//Actual resolution of the window will be the default 1280 * 720 but I think it's best to limit ourselves to 480 * 270
-//This means we need scaling factors... thankfully, these resolutions are both 16:9, so they can be constantly defined:
+// Actual resolution of the window will be the default 1280 * 720 but I think it's best to limit ourselves to 480 * 270
+// This means we need scaling factors... thankfully, these resolutions are both 16:9, so they can be constantly defined:
 const SCALING_FACTOR: f64 = 1280. / 480.;
 
 //Helper function to convert from game coords to rendering coords, could be a dumb way to implement it idk
@@ -29,6 +29,7 @@ pub fn run() {
     
     app.add_startup_system(setup.system());
     app.add_startup_stage("game setup", SystemStage::single(spawn_player.system()));
+    app.add_startup_system(spawn_map.system());
     app.run();
 }
 
@@ -49,7 +50,15 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     commands.insert_resource(Materials {
         player_material: materials.add(Color::rgb(0., 0., 1.).into())
     });
+}
 
+fn spawn_map(mut commands: Commands, asset_server: Res<AssetServer>, mut materials: ResMut<Assets<ColorMaterial>>) {
+    let handle = asset_server.load("maze.png");
+
+    commands.spawn_bundle(SpriteBundle {
+        material: materials.add(handle.into()),
+        ..Default::default()
+    });
 }
 
 fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
