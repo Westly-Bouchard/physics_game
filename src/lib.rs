@@ -5,9 +5,11 @@ use wasm_bindgen::prelude::*;
 
 // Actual resolution of the window will be the default 1280 * 720 but I think it's best to limit ourselves to 480 * 270
 // This means we need scaling factors... thankfully, these resolutions are both 16:9, so they can be constantly defined:
+#[allow(dead_code)]
 const SCALING_FACTOR: f64 = 1280. / 480.;
 
 //Helper function to convert from game coords to rendering coords, could be a dumb way to implement it idk
+#[allow(dead_code)]
 fn to_screenspace(x: i32, y: i32) -> (f64, f64) {
     (x as f64 * SCALING_FACTOR, y as f64 * SCALING_FACTOR)
 }
@@ -39,6 +41,8 @@ pub fn run() {
         .with_system_set(SystemSet::new()
             .with_system(spawn_map.system())
             .with_system(spawn_player.system())));
+
+    app.add_system(player_movement.system());
 
     app.run();
 }
@@ -73,4 +77,26 @@ fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
         sprite: Sprite::new(Vec2::new(10., 10.)),
         ..Default::default()
     }).insert(Player);
+}
+
+fn player_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Transform, With<Player>>) {
+    let x_movement = 2. * if keyboard_input.pressed(KeyCode::Left) {
+        -1.
+    } else if keyboard_input.pressed(KeyCode::Right) {
+        1.
+    } else {
+        0.
+    };
+    let y_movement = 2. * if keyboard_input.pressed(KeyCode::Down) {
+        -1.
+    } else if keyboard_input.pressed(KeyCode::Up) {
+        1.
+    } else {
+        0.
+    };
+
+    for mut transform in query.iter_mut() {
+        transform.translation.x += x_movement;
+        transform.translation.y += y_movement;
+    }
 }
