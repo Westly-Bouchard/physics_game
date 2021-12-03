@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use wasm_bindgen::prelude::*;
+use bevy::render::pass::ClearColor;
 // Retrograde appears to have broken itself so I guess we won't be using it
 // use bevy_retrograde::prelude::*;
 
@@ -35,6 +36,8 @@ pub fn run() {
 
     app.init_resource::<Materials>();
     
+    app.insert_resource(ClearColor(Color::rgb(1., 1., 1.)));
+    
     app.add_startup_system(setup.system().label("setup"));
 
     app.add_startup_stage(SETUP, SystemStage::single_threaded()
@@ -60,15 +63,47 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, a
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.insert_resource(Materials {
         player_material: materials.add(Color::rgb(0., 0., 1.).into()),
-        map: materials.add(asset_server.load("maze.png").into())
+        map: materials.add(Color::rgb(0., 0., 0.,).into())
     });
 }
 
 fn spawn_map(mut commands: Commands, materials: Res<Materials>) {
-    commands.spawn_bundle(SpriteBundle {
+    //Far Left
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, 350, -610, -350));
+
+    //Far right
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 610, 350, 630, -350));
+
+    //Top
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 350, 610, 330));
+
+    //Bottom
+    // commands.spawn_bundle(SpriteBundle {
+    //     material: materials.map.clone(),
+    //     transform: Transform::from_xyz(-106., -340., 0.),
+    //     sprite: Sprite::new(Vec2::new(1134., thickness)),
+    //     ..Default::default()
+    // });
+
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -350, 494, -320));
+
+    // commands.spawn_bundle(SpriteBundle {
+    //     material: materials.map.clone(),
+    //     transform: Transform::from_xyz(0., -280., 0.),
+    //     sprite: Sprite::new(Vec2::new(100., thickness)),
+    //     ..Default::default()
+    // });
+
+    
+}
+
+fn good_box_to_bad_box(materials: &Res<Materials>, x1: i32, y1: i32, x2: i32, y2: i32) -> SpriteBundle {
+    SpriteBundle {
         material: materials.map.clone(),
+        transform: Transform::from_xyz((x1 + x2) as f32 / 2., (y1 + y2) as f32 / 2., 0.),
+        sprite: Sprite::new(Vec2::new((x2 - x1) as f32, (y2 - y1) as f32)),
         ..Default::default()
-    });
+    }
 }
 
 fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
