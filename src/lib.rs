@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use wasm_bindgen::prelude::*;
 use bevy::render::pass::ClearColor;
+use bevy::sprite::collide_aabb::{collide, Collision};
 // Retrograde appears to have broken itself so I guess we won't be using it
 // use bevy_retrograde::prelude::*;
 
@@ -70,6 +71,7 @@ struct Materials {
 
 
 struct Player;
+struct Wall;
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, asset_server: Res<AssetServer>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
@@ -82,32 +84,36 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, a
 
 fn spawn_map(mut commands: Commands, materials: Res<Materials>) {
     //Far Left
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, 350, -610, -350));
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, 350, -610, -350)).insert(Wall);
 
     //Far right
-    commands.spawn_bundle(good_box_to_bad_box(&materials, 610, 350, 630, -350));
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 610, 350, 630, -350)).insert(Wall);
 
     //Top
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 350, 610, 330));
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 350, 610, 330)).insert(Wall);
 
     //Bottom
-    // commands.spawn_bundle(SpriteBundle {
-    //     material: materials.map.clone(),
-    //     transform: Transform::from_xyz(-106., -340., 0.),
-    //     sprite: Sprite::new(Vec2::new(1134., thickness)),
-    //     ..Default::default()
-    // });
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -350, 494, -330)).insert(Wall);
 
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -350, 494, -320));
-
-    // commands.spawn_bundle(SpriteBundle {
-    //     material: materials.map.clone(),
-    //     transform: Transform::from_xyz(0., -280., 0.),
-    //     sprite: Sprite::new(Vec2::new(100., thickness)),
-    //     ..Default::default()
-    // });
-
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -48, -474, -68)).insert(Wall);
     
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -86, -330, -66, -194)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 186, -330, 206, -194)).insert(Wall);
+
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -222, 330, -242, 78)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 58, -66, 78)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 78, -474, 194)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 194, -358, 214)).insert(Wall);
+
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -378, -78, -358, 58)).insert(Wall);
+
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 338, -214, 610, -194)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -86, -330, -66, -194)).insert(Wall);
+
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 494, 78, 610, 98)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 474, -58, 494, 98)).insert(Wall);
+
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, -234, -202, -214)).insert(Wall);
 }
 
 fn good_box_to_bad_box(materials: &Res<Materials>, x1: i32, y1: i32, x2: i32, y2: i32) -> SpriteBundle {
@@ -127,7 +133,10 @@ fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
     }).insert(Player);
 }
 
-fn player_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Transform, With<Player>>) {
+fn player_movement(
+    keyboard_input: Res<Input<KeyCode>>,
+    mut player_query: Query<&mut Transform, With<Player>>,
+) {
     let x_movement = 2. * if keyboard_input.pressed(KeyCode::Left) {
         -1.
     } else if keyboard_input.pressed(KeyCode::Right) {
@@ -143,7 +152,9 @@ fn player_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<&mut Tr
         0.
     };
 
-    for mut transform in query.iter_mut() {
+
+
+    for mut transform in player_query.iter_mut() {
         transform.translation.x += x_movement;
         transform.translation.y += y_movement;
     }
