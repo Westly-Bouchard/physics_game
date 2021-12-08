@@ -23,6 +23,11 @@ fn to_screenspace(x: i32, y: i32) -> (f64, f64) {
 //assets are loaded
 static SETUP: &str = "setup";
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemLabel)]
+enum Labels {
+    Movement,
+}
+
 
 #[wasm_bindgen]
 pub fn run() {
@@ -41,6 +46,8 @@ pub fn run() {
     app.init_resource::<Materials>();
     app.init_resource::<UIMaterials>();
     app.init_resource::<UIState>();
+
+    app.init_resource::<Inventory>();
     
     app.insert_resource(ClearColor(Color::rgb(1., 1., 1.)));
     
@@ -51,14 +58,17 @@ pub fn run() {
             .with_system(spawn_map.system())
             .with_system(spawn_player.system())));
 
-    app.add_system(player_movement.system());
-    app.add_system_set(SystemSet::new()
-        .with_system(ui_setup.system())
-        .with_system(ui_handle.system())
-        .with_system(ui_buttons.system())
-    );
+    app.add_system(player_movement.system().label(Labels::Movement));
+    app.add_system(player_collision_wall.system().after(Labels::Movement));
 
-    app.add_event::<UIStateUpdateEvent>();
+    // app.add_system_set(SystemSet::new()
+    //     .with_system(ui_dispatch.system())
+    //     .with_system(ui_handle.system())
+    //     .with_system(ui_buttons.system())
+    // );
+
+    // app.add_event::<UIStateUpdateEvent>();
+    // app.add_event::<UIUserTransformEvent>();
 
     app.run();
 }
@@ -69,9 +79,22 @@ struct Materials {
     map: Handle<ColorMaterial>
 }
 
+#[derive(Default)]
+struct Inventory {
+    has_resistor: bool,
+    has_capacitor: bool,
+
+}
+
+struct Collider {
+    width: i32,
+    height: i32
+}
+
 
 struct Player;
 struct Wall;
+struct Collectable;
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, asset_server: Res<AssetServer>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
@@ -84,7 +107,7 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, a
 
 fn spawn_map(mut commands: Commands, materials: Res<Materials>) {
     //Far Left
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, 350, -610, -350)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, 350, -610, -350)).insert(Wall).insert(Collider {width: 10, height: 700});
 
     //Far right
     commands.spawn_bundle(good_box_to_bad_box(&materials, 610, 350, 630, -350)).insert(Wall);
@@ -160,7 +183,22 @@ fn player_movement(
     }
 }
 
-// ui cool
+fn player_collision_wall(
+    mut q: QuerySet<(Query<(&mut Transform, &Sprite), With<Player>>, Query<(&Transform, &Sprite), With<Wall>>)>
+) {
+
+    let mut translation_x_offset = 0;
+    let mut translation_y_offset = 0;
+    for (wall_transform, wall_sprite) in q.q1().iter() {
+        // let collision = collide(
+            
+        // )
+    }
+
+    let mut transform = q.q0_mut().single_mut().unwrap();
+}
+
+// ui cool, very based
 
 struct UIMaterials {
     button_default: Handle<ColorMaterial>,
@@ -189,6 +227,23 @@ enum UIStateUpdateEvent {
 
 struct UIComponent;
 
+struct UserTransformable {
+    active: bool
+}
+
+impl Default for UserTransformable {
+    fn default() -> Self {
+        Self {
+            active: true
+        }
+    }
+}
+
+enum UIUserTransformEvent {
+    BeginTransform,
+    FinalizeTransform
+}
+
 
 impl FromWorld for UIMaterials {
     fn from_world(world: &mut World) -> Self {
@@ -202,17 +257,21 @@ impl FromWorld for UIMaterials {
     }
 }
 
-fn ui_setup(mut event_writer: EventWriter<UIStateUpdateEvent>, keyboard_input: Res<Input<KeyCode>>, mut state: ResMut<UIState>) {
+fn ui_dispatch(
+    mut state_writer: EventWriter<UIStateUpdateEvent>,
+    mut mouse_pos: EventReader<CursorMoved>,
+    keyboard_input: Res<Input<KeyCode>>,
+     mut state: ResMut<UIState>
+) {
     if keyboard_input.pressed(KeyCode::Escape) && state.open {
-        println!("Detected escape press, state is {}", state.open);
         state.open = false;
-        event_writer.send(UIStateUpdateEvent::Close);
-
+        state_writer.send(UIStateUpdateEvent::Close);
     } else if keyboard_input.pressed(KeyCode::S) && !state.open {
-        println!("Detected S press, state is {}", state.open);
         state.open = true;
-        event_writer.send(UIStateUpdateEvent::Open);
+        state_writer.send(UIStateUpdateEvent::Open);
     }
+
+    
 }
 
 fn ui_handle(
@@ -246,6 +305,7 @@ fn ui_handle(
                     ..Default::default()
                 })
                 .insert(UIComponent)
+                // .insert(UserTransformable)
                 .with_children(|parent| {
                     parent.spawn_bundle(TextBundle {
                         text: Text::with_section(
@@ -269,10 +329,18 @@ fn ui_handle(
     }
 }
 
+// fn ui_user_transform_handle(mut query: Query<UserTransformable, With<&mut Transform>>) {
+//     for (state, transform) in query.iter_mut() {
+
+//     }
+// }
+
+
 
 fn ui_buttons(
     materials: Res<UIMaterials>,
-     mut query: Query<(&Interaction, &mut Handle<ColorMaterial>, &Children), (Changed<Interaction>, With<Button>)>,
+    mut event_writer: EventWriter<UIUserTransformEvent>,
+    mut query: Query<(&Interaction, &mut Handle<ColorMaterial>, &Children), (Changed<Interaction>, With<Button>)>,
     mut text_query: Query<&mut Text>) {
         for (interaction, mut material, children) in query.iter_mut() {
             let mut text = text_query.get_mut(children[0]).unwrap();
@@ -280,6 +348,7 @@ fn ui_buttons(
             match *interaction {
                 Interaction::Clicked => {
                     text.sections[0].value = "Press".to_string();
+                    event_writer.send(UIUserTransformEvent::BeginTransform);
                     *material = materials.button_pressed.clone();
                 }
                 Interaction::Hovered => {
@@ -288,6 +357,7 @@ fn ui_buttons(
                 }
                 Interaction::None => {
                     text.sections[0].value = "Button".to_string();
+                    event_writer.send(UIUserTransformEvent::FinalizeTransform);
                     *material = materials.button_default.clone();
                 }
             }
