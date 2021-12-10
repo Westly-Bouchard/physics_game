@@ -56,10 +56,12 @@ pub fn run() {
     app.add_startup_stage(SETUP, SystemStage::single_threaded()
         .with_system_set(SystemSet::new()
             .with_system(spawn_map.system())
-            .with_system(spawn_player.system())));
+            .with_system(spawn_player.system()))
+            .with_system(spawn_collectibles.system()));
 
     app.add_system(player_movement.system().label(Labels::Movement));
     app.add_system(player_collision_wall.system().after(Labels::Movement));
+    app.add_system(collection_system.system().after(Labels::Movement));
 
     // app.add_system_set(SystemSet::new()
     //     .with_system(ui_dispatch.system())
@@ -76,14 +78,15 @@ pub fn run() {
 #[derive(Default)]
 struct Materials {
     player_material: Handle<ColorMaterial>,
-    map: Handle<ColorMaterial>
+    map: Handle<ColorMaterial>,
+    resistor_material: Handle<ColorMaterial>,
+    capacitor_material: Handle<ColorMaterial>
 }
 
 #[derive(Default)]
 struct Inventory {
     has_resistor: bool,
     has_capacitor: bool,
-
 }
 
 struct Collider {
@@ -94,14 +97,22 @@ struct Collider {
 
 struct Player;
 struct Wall;
-struct Collectable;
+enum Collectable {
+    RESISTOR,
+    CAPACITOR
+}
+struct CollectedEvent {
+    collectable_type: bool
+}
 
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, asset_server: Res<AssetServer>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.spawn_bundle(UiCameraBundle::default());
     commands.insert_resource(Materials {
         player_material: materials.add(Color::rgb(0., 0., 1.).into()),
-        map: materials.add(Color::rgb(0., 0., 0.,).into())
+        map: materials.add(Color::rgb(0., 0., 0.,).into()),
+        resistor_material: materials.add(Color::rgb(1., 0., 0.).into()),
+        capacitor_material: materials.add(Color::rgb(1., 0.5, 0.).into()),
     });
 }
 
@@ -151,9 +162,26 @@ fn good_box_to_bad_box(materials: &Res<Materials>, x1: i32, y1: i32, x2: i32, y2
 fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
     commands.spawn_bundle(SpriteBundle {
         material: materials.player_material.clone(),
+        transform: Transform::from_xyz(0., 0., 0.,),
         sprite: Sprite::new(Vec2::new(20., 20.)),
         ..Default::default()
     }).insert(Player);
+}
+
+fn spawn_collectibles(mut commands: Commands, materials: Res<Materials>) {
+    commands.spawn_bundle(SpriteBundle {
+        material: materials.resistor_material.clone(),
+        transform: Transform::from_xyz(-400., 300., 0.),
+        sprite: Sprite::new(Vec2::new(10., 10.)),
+        ..Default::default()
+    }).insert(Collectable::RESISTOR);
+
+    commands.spawn_bundle(SpriteBundle {
+        material: materials.capacitor_material.clone(),
+        transform: Transform::from_xyz(50., 0., 0.,),
+        sprite: Sprite::new(Vec2::new(10., 10.)),
+        ..Default::default()
+    }).insert(Collectable::CAPACITOR);
 }
 
 fn player_movement(
@@ -186,15 +214,11 @@ fn player_movement(
 fn player_collision_wall(
     mut q: QuerySet<(Query<(&Transform, &Sprite), With<Player>>, Query<&mut Transform, With<Player>>, Query<(&Transform, &Sprite), With<Wall>>)>
 ) {
-    // let (mut player_transform, player_sprite) = q.q0_mut().single_mut().unwrap();
     let (player_transform, player_sprite) = q.q0().single().unwrap();
-    // let player_sprite = q.q1().single().unwrap();
-
     let mut delta_X: f32 = 0.;
     let mut delta_Y: f32 = 0.;
 
     for (wall_transform, wall_sprite) in q.q2().iter() {
-        // println!("Player {:?}\n Player {:?}\n Wall {:?}\n Wall {:?}", player_transform.translation, player_sprite, wall_transform.translation, wall_sprite);
         let collision = collide (
             wall_transform.translation,
             wall_sprite.size,
@@ -225,16 +249,45 @@ fn player_collision_wall(
 
     let mut player_transform_mut = q.q1_mut().single_mut().unwrap();
 
+    if delta_X != 0. {player_transform_mut.translation.x -= delta_X;}
 
-
-    if delta_X != 0. {
-        player_transform_mut.translation.x -= delta_X;
-    }
-
-    if delta_Y != 0. {
-        player_transform_mut.translation.y -= delta_Y;
-    }    
+    if delta_Y != 0. {player_transform_mut.translation.y -= delta_Y;}    
 }
+
+fn collection_system(
+    player_query: Query<(&Transform, &Sprite), With<Player>>,
+    collectable_query: Query<(Entity, &Transform, &Sprite, &Collectable)>,
+    mut player_inventory: ResMut<Inventory>,
+    mut commands: Commands
+    /*mut collection_writer: EventWriter<CollectedEvent>,*/
+) {
+    let (player_transform, player_sprite) = player_query.single().unwrap();
+
+    for (entity, collectable_transform, collectable_sprite, type_of) in collectable_query.iter() {
+        let collision = collide(
+            collectable_transform.translation,
+            collectable_sprite.size,
+            player_transform.translation,
+            player_sprite.size,
+        );
+
+        if let Some(collision) = collision {
+            match type_of {
+                Collectable::RESISTOR => {
+                    player_inventory.has_resistor = true;
+                    println!("{}", player_inventory.has_resistor);
+                    commands.entity(entity).despawn()
+                }
+                Collectable::CAPACITOR => {
+                    player_inventory.has_resistor = true;
+                    commands.entity(entity).despawn()
+                }
+            }
+
+        }
+    }
+}
+
 
 // ui cool, very based
 
