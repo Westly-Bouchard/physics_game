@@ -107,23 +107,23 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, a
 
 fn spawn_map(mut commands: Commands, materials: Res<Materials>) {
     //Far Left
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, 350, -610, -350)).insert(Wall).insert(Collider {width: 10, height: 700});
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -630, -350, -610, 350)).insert(Wall);
 
     //Far right
-    commands.spawn_bundle(good_box_to_bad_box(&materials, 610, 350, 630, -350)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 610, -350, 630, 350)).insert(Wall);
 
-    //Top
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 350, 610, 330)).insert(Wall);
+    // Top
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 330, 610, 350)).insert(Wall);
 
     //Bottom
     commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -350, 494, -330)).insert(Wall);
 
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -48, -474, -68)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -68, -474, -48)).insert(Wall);
     
     commands.spawn_bundle(good_box_to_bad_box(&materials, -86, -330, -66, -194)).insert(Wall);
     commands.spawn_bundle(good_box_to_bad_box(&materials, 186, -330, 206, -194)).insert(Wall);
 
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -222, 330, -242, 78)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -242, 78, -222, 330)).insert(Wall);
     commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 58, -66, 78)).insert(Wall);
     commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 78, -474, 194)).insert(Wall);
     commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 194, -358, 214)).insert(Wall);
@@ -151,7 +151,7 @@ fn good_box_to_bad_box(materials: &Res<Materials>, x1: i32, y1: i32, x2: i32, y2
 fn spawn_player(mut commands: Commands, materials: Res<Materials>) {
     commands.spawn_bundle(SpriteBundle {
         material: materials.player_material.clone(),
-        sprite: Sprite::new(Vec2::new(10., 10.)),
+        sprite: Sprite::new(Vec2::new(20., 20.)),
         ..Default::default()
     }).insert(Player);
 }
@@ -184,18 +184,56 @@ fn player_movement(
 }
 
 fn player_collision_wall(
-    mut q: QuerySet<(Query<(&mut Transform, &Sprite), With<Player>>, Query<(&Transform, &Sprite), With<Wall>>)>
+    mut q: QuerySet<(Query<(&Transform, &Sprite), With<Player>>, Query<&mut Transform, With<Player>>, Query<(&Transform, &Sprite), With<Wall>>)>
 ) {
+    // let (mut player_transform, player_sprite) = q.q0_mut().single_mut().unwrap();
+    let (player_transform, player_sprite) = q.q0().single().unwrap();
+    // let player_sprite = q.q1().single().unwrap();
 
-    let mut translation_x_offset = 0;
-    let mut translation_y_offset = 0;
-    for (wall_transform, wall_sprite) in q.q1().iter() {
-        // let collision = collide(
-            
-        // )
+    let mut delta_X: f32 = 0.;
+    let mut delta_Y: f32 = 0.;
+
+    for (wall_transform, wall_sprite) in q.q2().iter() {
+        // println!("Player {:?}\n Player {:?}\n Wall {:?}\n Wall {:?}", player_transform.translation, player_sprite, wall_transform.translation, wall_sprite);
+        let collision = collide (
+            wall_transform.translation,
+            wall_sprite.size,
+            player_transform.translation,
+            player_sprite.size,
+        );
+
+        if let Some(collision) = collision {
+            match collision {
+                Collision::Left => {
+                    delta_X = (wall_transform.translation.x - player_transform.translation.x) + wall_sprite.size.x / 2.
+                },
+                Collision::Right => {
+                    delta_X = (wall_transform.translation.x - player_transform.translation.x) - wall_sprite.size.x / 2.
+                },
+                Collision::Top => {
+                    delta_Y = (wall_transform.translation.y - player_transform.translation.y) - wall_sprite.size.y / 2.
+                },
+                Collision::Bottom => {
+                    delta_Y = (wall_transform.translation.y - player_transform.translation.y) + wall_sprite.size.y / 2.
+                },
+            }
+        }
     }
 
-    let mut transform = q.q0_mut().single_mut().unwrap();
+    drop(player_transform);
+    drop(player_sprite);
+
+    let mut player_transform_mut = q.q1_mut().single_mut().unwrap();
+
+
+
+    if delta_X != 0. {
+        player_transform_mut.translation.x -= delta_X;
+    }
+
+    if delta_Y != 0. {
+        player_transform_mut.translation.y -= delta_Y;
+    }    
 }
 
 // ui cool, very based
