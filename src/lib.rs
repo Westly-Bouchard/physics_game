@@ -26,6 +26,7 @@ static SETUP: &str = "setup";
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemLabel)]
 enum Labels {
     Movement,
+    SpriteSpawn
 }
 
 
@@ -56,6 +57,7 @@ pub fn run() {
     app.add_startup_stage(SETUP, SystemStage::single_threaded()
         .with_system_set(SystemSet::new()
             .with_system(spawn_map.system())
+            .with_system(spawn_inventory.system())
             .with_system(spawn_player.system()))
             .with_system(spawn_collectibles.system()));
 
@@ -63,14 +65,13 @@ pub fn run() {
     app.add_system(player_collision_wall.system().after(Labels::Movement));
     app.add_system(collection_system.system().after(Labels::Movement));
 
-    // app.add_system_set(SystemSet::new()
-    //     .with_system(ui_dispatch.system())
-    //     .with_system(ui_handle.system())
-    //     .with_system(ui_buttons.system())
-    // );
+    app.add_system_set(SystemSet::new()
+        .with_system(ui_dispatch.system())
+        .with_system(ui_handle.system())
+        .with_system(ui_buttons.system())
+    );
 
-    // app.add_event::<UIStateUpdateEvent>();
-    // app.add_event::<UIUserTransformEvent>();
+    app.add_event::<UIStateUpdateEvent>();
 
     app.run();
 }
@@ -79,8 +80,12 @@ pub fn run() {
 struct Materials {
     player_material: Handle<ColorMaterial>,
     map: Handle<ColorMaterial>,
+
     resistor_material: Handle<ColorMaterial>,
-    capacitor_material: Handle<ColorMaterial>
+    capacitor_material: Handle<ColorMaterial>,
+
+    inventory_menu_border: Handle<ColorMaterial>,
+    inventory_menu_fill: Handle<ColorMaterial>
 }
 
 #[derive(Default)]
@@ -89,7 +94,10 @@ struct Inventory {
     has_capacitor: bool,
 }
 
-struct Collider {
+struct InventoryViewComponent;
+struct InventoryViewItem;
+
+struct Collider { 
     width: i32,
     height: i32
 }
@@ -111,8 +119,12 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>, a
     commands.insert_resource(Materials {
         player_material: materials.add(Color::rgb(0., 0., 1.).into()),
         map: materials.add(Color::rgb(0., 0., 0.,).into()),
+
         resistor_material: materials.add(Color::rgb(1., 0., 0.).into()),
         capacitor_material: materials.add(Color::rgb(1., 0.5, 0.).into()),
+
+        inventory_menu_border: materials.add(Color::rgba(1., 0., 0., 0.3).into()),
+        inventory_menu_fill: materials.add(Color::rgba(0., 1., 1., 0.3).into())
     });
 }
 
@@ -132,10 +144,15 @@ fn spawn_map(mut commands: Commands, materials: Res<Materials>) {
     commands.spawn_bundle(good_box_to_bad_box(&materials, -610, -68, -474, -48)).insert(Wall);
     
     commands.spawn_bundle(good_box_to_bad_box(&materials, -86, -330, -66, -194)).insert(Wall);
-    commands.spawn_bundle(good_box_to_bad_box(&materials, 186, -330, 206, -194)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, 186, -330, 206, -174)).insert(Wall);
+        commands.spawn_bundle(good_box_to_bad_box(&materials, 50, -174, 342, -154)).insert(Wall);
 
     commands.spawn_bundle(good_box_to_bad_box(&materials, -242, 78, -222, 330)).insert(Wall);
-    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 58, -66, 78)).insert(Wall);
+    commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 58, -66, 78)).insert(Wall); //long one
+        commands.spawn_bundle(good_box_to_bad_box(&materials, -86, -78, -66, 58)).insert(Wall);
+        commands.spawn_bundle(good_box_to_bad_box(&materials, -222, -78, -86, -58)).insert(Wall);
+        commands.spawn_bundle(good_box_to_bad_box(&materials, -222, -214, -202, -78)).insert(Wall);
+    
     commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 78, -474, 194)).insert(Wall);
     commands.spawn_bundle(good_box_to_bad_box(&materials, -494, 194, -358, 214)).insert(Wall);
 
@@ -148,6 +165,7 @@ fn spawn_map(mut commands: Commands, materials: Res<Materials>) {
     commands.spawn_bundle(good_box_to_bad_box(&materials, 474, -58, 494, 98)).insert(Wall);
 
     commands.spawn_bundle(good_box_to_bad_box(&materials, -494, -234, -202, -214)).insert(Wall);
+
 }
 
 fn good_box_to_bad_box(materials: &Res<Materials>, x1: i32, y1: i32, x2: i32, y2: i32) -> SpriteBundle {
@@ -184,6 +202,24 @@ fn spawn_collectibles(mut commands: Commands, materials: Res<Materials>) {
     }).insert(Collectable::CAPACITOR);
 }
 
+fn spawn_inventory(mut commands: Commands, materials: Res<Materials>) {
+    commands.spawn_bundle(SpriteBundle {
+        material: materials.inventory_menu_border.clone(),
+        transform: Transform::from_xyz(((WINDOW_WIDTH / 2.) - 50.) - 30., ((WINDOW_HEIGHT / 2.) - 20.) - 30., 0.),
+        sprite: Sprite::new(Vec2::new(100., 40.)),
+        ..Default::default()
+    })
+    .insert(InventoryViewComponent);
+
+    commands.spawn_bundle(SpriteBundle {
+        material: materials.inventory_menu_fill.clone(),
+        transform: Transform::from_xyz(((WINDOW_WIDTH / 2.) - 49.) - 30., ((WINDOW_HEIGHT / 2.) - 19.) - 30.0, 0.),
+        sprite: Sprite::new(Vec2::new(98., 38.)),
+        ..Default::default()
+    })
+    .insert(InventoryViewComponent);
+}
+
 fn player_movement(
     keyboard_input: Res<Input<KeyCode>>,
     mut player_query: Query<&mut Transform, With<Player>>,
@@ -212,11 +248,15 @@ fn player_movement(
 }
 
 fn player_collision_wall(
-    mut q: QuerySet<(Query<(&Transform, &Sprite), With<Player>>, Query<&mut Transform, With<Player>>, Query<(&Transform, &Sprite), With<Wall>>)>
+    mut q: QuerySet<(
+        Query<(&Transform, &Sprite), With<Player>>,
+        Query<&mut Transform, With<Player>>,
+        Query<(&Transform, &Sprite), With<Wall>>
+    )>
 ) {
     let (player_transform, player_sprite) = q.q0().single().unwrap();
-    let mut delta_X: f32 = 0.;
-    let mut delta_Y: f32 = 0.;
+    let mut delta_x: f32 = 0.;
+    let mut delta_y: f32 = 0.;
 
     for (wall_transform, wall_sprite) in q.q2().iter() {
         let collision = collide (
@@ -229,16 +269,16 @@ fn player_collision_wall(
         if let Some(collision) = collision {
             match collision {
                 Collision::Left => {
-                    delta_X = (wall_transform.translation.x - player_transform.translation.x) + wall_sprite.size.x / 2.
+                    delta_x = (wall_transform.translation.x - player_transform.translation.x) + wall_sprite.size.x / 2.
                 },
                 Collision::Right => {
-                    delta_X = (wall_transform.translation.x - player_transform.translation.x) - wall_sprite.size.x / 2.
+                    delta_x = (wall_transform.translation.x - player_transform.translation.x) - wall_sprite.size.x / 2.
                 },
                 Collision::Top => {
-                    delta_Y = (wall_transform.translation.y - player_transform.translation.y) - wall_sprite.size.y / 2.
+                    delta_y = (wall_transform.translation.y - player_transform.translation.y) - wall_sprite.size.y / 2.
                 },
                 Collision::Bottom => {
-                    delta_Y = (wall_transform.translation.y - player_transform.translation.y) + wall_sprite.size.y / 2.
+                    delta_y = (wall_transform.translation.y - player_transform.translation.y) + wall_sprite.size.y / 2.
                 },
             }
         }
@@ -249,14 +289,15 @@ fn player_collision_wall(
 
     let mut player_transform_mut = q.q1_mut().single_mut().unwrap();
 
-    if delta_X != 0. {player_transform_mut.translation.x -= delta_X;}
+    if delta_x != 0. {player_transform_mut.translation.x -= delta_x;}
 
-    if delta_Y != 0. {player_transform_mut.translation.y -= delta_Y;}    
+    if delta_y != 0. {player_transform_mut.translation.y -= delta_y;}    
 }
-
+//Rewrite to use event writer
 fn collection_system(
     player_query: Query<(&Transform, &Sprite), With<Player>>,
     collectable_query: Query<(Entity, &Transform, &Sprite, &Collectable)>,
+    materials: Res<Materials>,
     mut player_inventory: ResMut<Inventory>,
     mut commands: Commands
     /*mut collection_writer: EventWriter<CollectedEvent>,*/
@@ -276,14 +317,29 @@ fn collection_system(
                 Collectable::RESISTOR => {
                     player_inventory.has_resistor = true;
                     println!("{}", player_inventory.has_resistor);
-                    commands.entity(entity).despawn()
+                    commands.entity(entity).despawn();
+
+                    commands.spawn_bundle(SpriteBundle {
+                        material: materials.resistor_material.clone(),
+                        transform: Transform::from_xyz((WINDOW_WIDTH / 2.) - 10. - 30. - 15., (WINDOW_HEIGHT / 2.) - 10. - 30. - 15., 0.),
+                        sprite: Sprite::new(Vec2::new(10., 10.)),
+                        ..Default::default()
+                    });
                 }
                 Collectable::CAPACITOR => {
                     player_inventory.has_resistor = true;
-                    commands.entity(entity).despawn()
+                    commands.entity(entity).despawn();
+
+                    commands.spawn_bundle(SpriteBundle {
+                        material: materials.capacitor_material.clone(),
+                        transform: Transform::from_xyz((WINDOW_WIDTH / 2.) - 10. - 30. - 30., (WINDOW_HEIGHT / 2.) - 10. - 30. - 15., 0.),
+                        sprite: Sprite::new(Vec2::new(10., 10.)),
+                        ..Default::default()
+                    });
                 }
             }
 
+            
         }
     }
 }
@@ -329,12 +385,6 @@ impl Default for UserTransformable {
         }
     }
 }
-
-enum UIUserTransformEvent {
-    BeginTransform,
-    FinalizeTransform
-}
-
 
 impl FromWorld for UIMaterials {
     fn from_world(world: &mut World) -> Self {
@@ -420,17 +470,9 @@ fn ui_handle(
     }
 }
 
-// fn ui_user_transform_handle(mut query: Query<UserTransformable, With<&mut Transform>>) {
-//     for (state, transform) in query.iter_mut() {
-
-//     }
-// }
-
-
 
 fn ui_buttons(
     materials: Res<UIMaterials>,
-    mut event_writer: EventWriter<UIUserTransformEvent>,
     mut query: Query<(&Interaction, &mut Handle<ColorMaterial>, &Children), (Changed<Interaction>, With<Button>)>,
     mut text_query: Query<&mut Text>) {
         for (interaction, mut material, children) in query.iter_mut() {
@@ -439,7 +481,6 @@ fn ui_buttons(
             match *interaction {
                 Interaction::Clicked => {
                     text.sections[0].value = "Press".to_string();
-                    event_writer.send(UIUserTransformEvent::BeginTransform);
                     *material = materials.button_pressed.clone();
                 }
                 Interaction::Hovered => {
@@ -448,7 +489,6 @@ fn ui_buttons(
                 }
                 Interaction::None => {
                     text.sections[0].value = "Button".to_string();
-                    event_writer.send(UIUserTransformEvent::FinalizeTransform);
                     *material = materials.button_default.clone();
                 }
             }
